@@ -1,0 +1,47 @@
+KEYCLICK - Tastaturklick der NCR Decision Mate V an- und ausschalten
+=====================================================================
+
+Fuer MS-DOS ab 2.0 auf der DMV mit 8088/V20-Karte (K230/K231/K235).
+Voraussetzung ist der gepatchte Tastatur-Controller auf der
+Hauptplatine (8741, ROM 32678 mit Klick-Patch).
+
+Aufruf
+------
+  KEYCLICK        zeigt die Einstellung
+  KEYCLICK ON     Tastaturklick an
+  KEYCLICK OFF    Tastaturklick aus
+  KEYCLICK LOW    nur ein leiser Knack
+
+Gross- und Kleinschreibung ist egal. Fuer Stapeldateien liefert
+KEYCLICK einen ERRORLEVEL:
+  0  erledigt
+  1  falscher Parameter
+  2  Originalfirmware ohne Klick-Schalter
+  3  Tastatur-Controller antwortet nicht
+  4  erste Patch-Version ohne LOW, der Klick bleibt AN
+
+Nach jedem Reset ist der Klick wieder an, weil das Boot-ROM den
+Selbsttest des 8741 startet und dieser sein RAM loescht. Wer ihn nie
+hoeren will, schreibt KEYCLICK OFF in die AUTOEXEC.BAT. Der lange
+Ton (Bell, Musik per ESC M) bleibt immer an.
+
+Wie es funktioniert
+-------------------
+Den Klick erzeugt nicht die Tastatur, sondern der Lautsprecher auf der
+Hauptplatine, den der 8741 ueber P2.0 ansteuert. Die Originalfirmware
+spielt ihn jedes Mal, wenn sie einen Tastencode an den Rechner
+weitergibt (etwa 870 Hz, 20 ms). Der Patch nutzt die freien Befehle
+02h (Klick aus), 03h (Klick an) und 04h (LOW: statt eines Tons nur
+ein einzelner Impuls von 0,5 ms, also ein Knack) und meldet im
+Statusregister (Port 41h) Bit 6 = Patch vorhanden, Bit 5 = Klick aus
+und Bit 4 = LOW.
+
+Die Originalfirmware darf die Befehle 02h bis 05h nie bekommen: Sie
+bleibt dann in ihrem Befehlsverteiler haengen und fragt die Tastatur
+erst nach dem naechsten Befehlsbyte wieder ab. Deshalb prueft
+KEYCLICK zuerst Bit 6 und tut ohne Patch nichts. Die erste Patch-
+Version kennt 02h und 03h, aber nicht 04h. Bestaetigt der Controller
+LOW nicht, schickt KEYCLICK 03h hinterher; das beendet die Schleife,
+und der Klick ist wieder AN.
+
+Uebersetzen mit MASM 5.10: BUILD.BAT

@@ -1,0 +1,62 @@
+; Key click patch for 8741 ROM 32678 - all changed bytes of the patched
+; ROM (output of MKROM.PY), disassembled. 2F2h-2F4h is the STS table.
+
+; --- 0CDh-0CEh  click after a key code was passed to the host
+0CD: 44 BB     JMP 2BBh
+
+; --- 206h-208h  command table: 02h, 03h, 04h
+;   original: 00 00 00   patched: D2 D8 DE
+
+; --- 227h-228h  end of command 01h (country code)
+227: 44 E9     JMP 2E9h
+
+; --- 240h-241h  self test passed
+240: 44 E4     JMP 2E4h
+
+; --- 10Ah-113h  LOW: single pulse
+10A: 9A FE     ANL P2,#FEh
+10C: BC 62     MOV R4,#62h
+10E: EC 0E     DJNZ R4,10Eh
+110: 8A 01     ORL P2,#01h
+112: 04 A6     JMP 0A6h
+
+; --- 2BBh-2F4h  hook, commands, status
+2BB: B8 29     MOV R0,#29h
+2BD: F0        MOV A,@R0
+2BE: C6 C5     JZ 2C5h
+2C0: 07        DEC A
+2C1: C6 D0     JZ 2D0h
+2C3: 24 0A     JMP 10Ah
+2C5: BB 6F     MOV R3,#6Fh
+2C7: BC 6F     MOV R4,#6Fh
+2C9: BD 00     MOV R5,#00h
+2CB: BF 02     MOV R7,#02h
+2CD: 95        CPL F0
+2CE: 44 64     JMP 264h
+2D0: 04 A6     JMP 0A6h
+2D2: B8 29     MOV R0,#29h
+2D4: B0 01     MOV @R0,#01h
+2D6: 44 EB     JMP 2EBh
+2D8: B8 29     MOV R0,#29h
+2DA: B0 00     MOV @R0,#00h
+2DC: 44 EB     JMP 2EBh
+2DE: B8 29     MOV R0,#29h
+2E0: B0 02     MOV @R0,#02h
+2E2: 44 EB     JMP 2EBh
+2E4: 23 40     MOV A,#40h
+2E6: 90        MOV STS,A
+2E7: 04 32     JMP 032h
+2E9: B8 29     MOV R0,#29h
+2EB: F0        MOV A,@R0
+2EC: 03 F2     ADD A,#F2h
+2EE: A3        MOVP A,@A
+2EF: 90        MOV STS,A
+2F0: 04 60     JMP 060h
+2F2: 40        ORL A,@R0
+2F3: 60        ADD A,@R0
+2F4: 50        ANL A,@R0
+
+; --- 3FFh-3FFh  checksum
+;   original: 5B   patched: 94
+
+; 78 bytes differ from the original

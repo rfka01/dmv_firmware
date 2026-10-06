@@ -1,0 +1,13 @@
+# DMV files are kept byte for byte (CRLF, Ctrl-Z)
+*.ASM -text
+*.A86 -text
+*.BAT -text
+*.TXT -text
+*.DOC -text
+*.LST -text
+*.IMG binary
+*.bin binary
+*.BIN binary
+*.COM binary
+*.CMD binary
+*.68K binary

@@ -1,0 +1,100 @@
+KEYCLICK - Tastaturklick der NCR Decision Mate V unter CP/M
+============================================================
+
+  KEYCLICK.COM    CP/M-80  (Z80 der Hauptplatine)
+  KEYCLICK.CMD    CP/M-86  (8088/V20-Karte K230/K231/K235)
+  KEYCLICK.68K    CP/M-68K (68008-Karte K234)
+
+Alle drei brauchen den gepatchten Tastatur-Controller auf der
+Hauptplatine (8741, ROM 32678 mit Klick-Patch).
+
+Aufruf
+------
+  KEYCLICK        zeigt die Einstellung
+  KEYCLICK ON     Tastaturklick an
+  KEYCLICK OFF    Tastaturklick aus
+  KEYCLICK LOW    nur ein leiser Knack
+
+Nach jedem Reset ist der Klick wieder an, weil das Boot-ROM den
+Selbsttest des 8741 startet und dieser sein RAM loescht. Der lange
+Ton (Bell, Musik per ESC M) bleibt immer an.
+
+Wie es funktioniert
+-------------------
+Den Klick erzeugt nicht die Tastatur, sondern der Lautsprecher auf der
+Hauptplatine, den der 8741 ueber P2.0 ansteuert. Die Originalfirmware
+spielt ihn jedes Mal, wenn sie einen Tastencode an den Rechner
+weitergibt (etwa 870 Hz, 20 ms). Der Patch nutzt die freien Befehle
+02h (Klick aus), 03h (Klick an) und 04h (LOW: statt eines Tons nur
+ein einzelner Impuls von 0,5 ms, also ein Knack) und meldet im
+Statusregister (Port 41h) Bit 6 = Patch vorhanden, Bit 5 = Klick aus
+und Bit 4 = LOW. Der Z80 und der 8088 erreichen den 8741 ueber die
+Ports 40h/41h, der 68008 der K234 ueber die Adressen FFF40h/FFF41h.
+
+Die Originalfirmware darf die Befehle 02h bis 05h nie bekommen: Sie
+bleibt dann in ihrem Befehlsverteiler haengen und fragt die Tastatur
+erst nach dem naechsten Befehlsbyte wieder ab. Deshalb prueft
+KEYCLICK zuerst Bit 6 und tut ohne Patch nichts. Die erste Patch-
+Version kennt 02h und 03h, aber nicht 04h. Bestaetigt der Controller
+LOW nicht, schickt KEYCLICK 03h hinterher; das beendet die Schleife,
+und der Klick ist wieder AN. Das dauert bis zu etwa 20 Sekunden.
+
+Quellen
+-------
+  KEYCLICK.ASM    CP/M-80, nur 8080-Befehle: ASM KEYCLICK, LOAD KEYCLICK
+  KEYCLICK.A86    CP/M-86, MASM-Syntax, Programm ab 100h; MKCMD.PY
+                  setzt den CMD-Kopf (8080-Speichermodell) davor
+  KEYCLICK.S      CP/M-68K, GNU as (m68k-linux-gnu-as -m68000
+                  --register-prefix-optional); lageunabhaengig, MK68K.PY
+                  setzt den Programmkopf (601Ah) davor
+
+
+KEYCLICK - key click of the NCR Decision Mate V under CP/M
+===========================================================
+
+  KEYCLICK.COM    CP/M-80  (Z80 on the mainboard)
+  KEYCLICK.CMD    CP/M-86  (8088/V20 card K230/K231/K235)
+  KEYCLICK.68K    CP/M-68K (68008 card K234)
+
+All three need the patched keyboard controller on the mainboard
+(8741, ROM 32678 with key click patch).
+
+Usage
+-----
+  KEYCLICK        show the current setting
+  KEYCLICK ON     key click on
+  KEYCLICK OFF    key click off
+  KEYCLICK LOW    just a faint tick
+
+After every reset the click is on again: the boot ROM starts the
+self test of the 8741, which clears its RAM. The long tone (bell,
+music with ESC M) is never affected.
+
+How it works
+------------
+The click is not made by the keyboard but by the speaker on the
+mainboard, which the 8741 drives through P2.0. The original firmware
+plays it whenever it passes a key code to the computer (about 870 Hz,
+20 ms). The patch uses the free commands 02h (click off), 03h (click
+on) and 04h (LOW: a single 0.5 ms pulse instead of a tone, i.e. a
+tick) and reports in the status register (port 41h) bit 6 = patch
+present, bit 5 = click off and bit 4 = LOW. The Z80 and the 8088
+reach the 8741 through ports 40h/41h, the 68008 of the K234 through
+the addresses FFF40h/FFF41h.
+
+The original firmware must never get the commands 02h to 05h: it
+then hangs in its command dispatcher and does not scan the keyboard
+again until the next command byte. KEYCLICK therefore checks bit 6
+first and does nothing without the patch. The first patch version
+knows 02h and 03h but not 04h. If the controller does not confirm
+LOW, KEYCLICK sends 03h afterwards; this ends the loop and the click
+is ON again. This takes up to about 20 seconds.
+
+Sources
+-------
+  KEYCLICK.ASM    CP/M-80, 8080 instructions only: ASM KEYCLICK, LOAD KEYCLICK
+  KEYCLICK.A86    CP/M-86, MASM syntax, program from 100h; MKCMD.PY
+                  puts the CMD header (8080 memory model) in front
+  KEYCLICK.S      CP/M-68K, GNU as (m68k-linux-gnu-as -m68000
+                  --register-prefix-optional); position independent,
+                  MK68K.PY puts the program header (601Ah) in front
