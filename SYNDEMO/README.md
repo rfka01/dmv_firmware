@@ -40,7 +40,7 @@ Die Firmware gilt für ROM 32678.
 
 ### Test
 
-Die Firmware ist in einer zyklengenauen Simulation beider 8741 (Motherboard und Tastatur) geprüft: Tastatur und Keyclick verhalten sich wie bei Keyclick v4, auch während der Synthesizer läuft. Die Tonhöhen stimmen auf ±0,5 %. Die erste Fassung von SYNDEMO und das Rennwerk sind von rfka01 getestet; die jetzige Fassung mit den Effekten und dem Kanon ist im Emulator und in der Simulation des 8741 geprüft.
+Die Firmware ist in einer zyklengenauen Simulation beider 8741 (Motherboard und Tastatur) geprüft: Tastatur und Keyclick verhalten sich wie bei Keyclick v4, auch während der Synthesizer läuft. Die Tonhöhen stimmen auf ±0,5 %. Die erste Fassung von SYNDEMO und das Rennwerk sind von rfka01 in MAME getestet; die jetzige Fassung mit den Effekten und dem Kanon ist im Emulator und in der Simulation des 8741 geprüft. Auf einer echten DMV noch nicht getestet.
 
 ## English
 
@@ -80,7 +80,7 @@ The firmware is for ROM 32678.
 
 ### Tests
 
-The firmware has been checked in a cycle-accurate simulation of both 8741s (motherboard and keyboard): keyboard and key click behave like Keyclick v4, also while the synthesizer is running. Pitches are within ±0.5 %. The first version of SYNDEMO and the race have been tested by rfka01; the current version with effects and the round has been checked in the emulator and in the 8741 simulation.
+The firmware has been checked in a cycle-accurate simulation of both 8741s (motherboard and keyboard): keyboard and key click behave like Keyclick v4, also while the synthesizer is running. Pitches are within ±0.5 %. The first version of SYNDEMO and the race have been tested by rfka01 in MAME; the current version with effects and the round has been checked in the emulator and in the 8741 simulation. Not yet tested on a real DMV.
 
 ---
 

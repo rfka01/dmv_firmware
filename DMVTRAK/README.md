@@ -36,7 +36,7 @@ Turbo Pascal 3.01A, `DMVTRAK.PAS` als Hauptdatei, Compiler-Option C (Com-file), 
 
 ### Test
 
-Im Emulator (emu2 mit einem Modell des 8741) und mit der zyklengenauen Simulation des 8741 geprüft; von rfka01 erprobt.
+Im Emulator (emu2 mit einem Modell des 8741) und mit der zyklengenauen Simulation des 8741 geprüft; von rfka01 in MAME getestet. Auf einer echten DMV noch nicht getestet.
 
 ### Musik
 
@@ -76,7 +76,7 @@ Turbo Pascal 3.01A, `DMVTRAK.PAS` as main file, compiler option C (com file), th
 
 ### Tests
 
-Checked in an emulator (emu2 with a model of the 8741) and with the cycle-accurate 8741 simulation; tried out by rfka01.
+Checked in an emulator (emu2 with a model of the 8741) and with the cycle-accurate 8741 simulation; tested by rfka01 in MAME. Not yet tested on a real DMV.
 
 ### Music
 
