@@ -1,0 +1,87 @@
+DMVTRAK 0.4 - MOD-Player und Tracker fuer den Lautsprecher der NCR DMV
+=====================================================================
+Testfassung vom 07.10.2026
+
+Start:  DMVTRAK                 Editor mit leerem Lied
+        DMVTRAK datei           Editor mit MOD oder DTK
+        DMVTRAK datei /P        nur abspielen (Leertaste oder ESC = Ende)
+
+Klang mit Synthesizer-Firmware (dmv_mb_8741_32678_synth.bin)
+- Der Tastatur-Controller (8741) erzeugt drei Rechteckstimmen und
+  Rauschen selbst; DMVTRAK stellt nur bei jedem Tick die Frequenzen.
+- Tonhoehe exakt aus der MOD-Periode, Slides und Arpeggio stufenlos.
+- Die drei wichtigsten klingenden Kanaele (Prioritaet, dann juengster
+  Anschlag) bekommen je eine Stimme. Instrumente mit "Rauschen"
+  (Schlagzeug) schalten das Rauschen beim Anschlag bis zu 80 ms ein.
+- Takt vom Timer des 8741 (die Firmware zeigt ihn im Status an),
+  Tempo wie im MOD, unabhaengig von DOS und vom 8253.
+- Die Tastatur geht weiter (Abfrage alle 100 ms, ohne Tastenklick).
+- Die Firmware enthaelt Keyclick v4; KEYCLICK.COM funktioniert weiter.
+  Erkennung: Status (Port 41h) Bit 7 gesetzt. Firmware CRC32 bcb29bec (1bd9e156 geht auch).
+- Menue M schaltet um: Synthesizer -> 1 Stimme fuehrend -> 1 Stimme
+  Arpeggio.
+
+Klang ohne Synthesizer-Firmware (Original-8741)
+Der Lautsprecher am Tastatur-Controller spielt eine Stimme: Halbtoene
+von A (110 Hz) bis D (1175 Hz), Laenge in Schritten von 20 ms.
+DMVTRAK macht daraus Musik so:
+
+- MODs (15 oder 31 Instrumente, 4/6/8 Kanaele) werden ohne Samples
+  geladen; nur Noten, Effekte, Samplelaenge und Schleife zaehlen.
+- Fuehrende Stimme: Es klingt der Kanal, dessen Instrument die hoechste
+  Prioritaet hat (bei Gleichstand der zuletzt angeschlagene).
+- Arpeggio (Menue M): Die klingenden Kanaele wechseln sich alle 20 ms ab.
+- Ein Tastendruck piept (Tastenklick des 8741) und verschiebt die Musik
+  um 40 ms; deshalb wird nur im Stopp editiert.
+- Beim MOD-Import werden die Prioritaeten geschaetzt: Instrumente mit
+  hoechstens zwei verschiedenen Noten gelten als Schlagzeug (1), die
+  anderen nach mittlerer Tonhoehe (hoechste Stimme 9). Im Menue I
+  laesst sich das aendern (0 = stumm), ebenso Rauschen (Taste R).
+- Effekte: 0 Arpeggio, 1/2/3/5 Slides (in Halbtoenen), 6/A Lautstaerke-
+  Slide, 9, B, C (0 = aus), D, F, E1 E2 E6 EA EB EC ED EE. Lautstaerke
+  zaehlt nur als an/aus. Vibrato und Tremolo fallen weg.
+- MOD C-1..H-3 klingt als C (131 Hz) .. H (988 Hz). Transponierung je
+  Instrument (Menue I) und gesamt (Menue G).
+
+Editor
+  Pfeile          Zelle waehlen (auch ^E ^X ^S ^D, ^K ^J ^H ^L)
+  ^R ^C           16 Zeilen hoch/runter
+  TAB             naechster Kanal
+  < >             vorige/naechste Position der Reihenfolge
+  + -             Oktave fuer die Noteneingabe
+  Leertaste       ab Cursor spielen / Stopp
+  RETURN          Lied von vorn spielen
+  Notenspalte     Y S X D C V G B H N J M ,     (C bis C)
+                  Q 2 W 3 E R 5 T 6 Z 7 U I 9 O 0 P   (C bis E, Okt.+1)
+                  1 = Ton aus (Effekt C00)
+  andere Spalten  0-9 A-F (Instrument, Effekt, Parameter)
+  . oder DEL      Feld loeschen
+  ESC             Menue: L Laden, S Speichern, N Neu, I Instrumente,
+                  R Reihenfolge, M Modus, T Tempo, W Wiederholen,
+                  U Ueberschrift (Titel), G Transponierung, E Ende
+
+Neu in 0.4
+- Editor: Die Anzeige beim Abspielen schreibt nur noch geaenderte
+  Zeichen und verwirft eine veraltete Seite, damit sie mit der Musik
+  mithaelt.
+
+Neu in 0.3
+- Die Wiedergabe stockte auf der DMV: Gleitkommarechnung und Bild-
+  schirmaufbau hielten den 8088 so lange auf, dass die Zeitmessung am
+  8253 (Umlauf 5 ms) Durchlaeufe verpasste. Jetzt Ganzzahlrechnung,
+  schnellere Bildschirmausgabe und die Uhr des 8741 (Umlauf 20 ms).
+  Dafuer ist die neue Firmware noetig.
+
+Hinweise
+- Ohne Synthesizer laeuft ein Ton hoechstens 1 s am Stueck; Stopp
+  wirkt erst, wenn der laufende Ton fertig ist.
+- Gespeichert wird im eigenen Format DTK (ohne Samples, klein).
+  DTK-Dateien von 0.1 kennen das Merkmal Rauschen noch nicht: neu aus
+  dem MOD laden oder im Menue I setzen.
+
+Neu bauen: Turbo Pascal 3.01A, DMVTRAK.PAS als Hauptdatei, Compiler-
+Option C (Com-file); die Dateien DTK*.INC im selben Verzeichnis.
+Quelltext und Firmware: github.com/rfka01/dmv_firmware, Verzeichnisse
+DMVTRAK und SYNDEMO.
+
+Code: Claude (Anthropic), Idee und Prompts: rfka01 - Lizenz MIT

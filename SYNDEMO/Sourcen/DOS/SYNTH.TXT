@@ -1,0 +1,109 @@
+Synthesizer und Rennwerk im Tastatur-Controller der NCR DMV
+===========================================================
+Firmware dmv_mb_8741_32678_synth.bin, CRC32 bcb29bec, 07.10.2026
+(ersetzt ROM 32678 des 8741 auf der Hauptplatine; enthaelt Keyclick v4)
+
+Der 8741 erzeugt drei Rechteckstimmen und Rauschen selbst und kann einen
+Divisionstest rechnen ("Rennwerk"). Jedes Programm kann beides ueber die
+Ports 40h (Daten) und 41h (Befehl/Status) benutzen.
+
+
+1. Erkennen
+-----------
+Status lesen (IN 41h), obere vier Bits:
+
+   C0h / E0h / D0h   Synthesizer-Firmware, Klick an / aus / LOW
+   40h / 60h / 50h   nur Keyclick v4 (kein Synthesizer)
+   00h               Original-Firmware
+
+Ist Bit 2 (F0) gesetzt, laeuft gerade ein Synthesizer (oder ein Tasten-
+klick). Ohne Bit 7 niemals Befehl 02h..05h schicken: Die Original-
+Firmware bleibt dann im Befehlsverteiler haengen, und die Tastatur steht.
+
+
+2. Schreibregeln
+----------------
+Vor jedem Byte warten, bis Status Bit 1 (IBF) = 0 ist; dann OUT 40h
+(Daten) oder OUT 41h (Befehl). Ein Befehl an 41h beendet den
+Synthesizer immer; 05h kehrt nur in die Hauptschleife zurueck, jeder
+andere Befehl wird danach normal ausgefuehrt (02h..04h Klick, 06h Ton,
+07h Glocke).
+
+
+3. Synthesizer
+--------------
+Einschalten: Befehl 05h. Bereit, sobald Status Bit 2 (F0) = 1 ist (bis
+0,6 s, falls der 8741 noch einen Ton spielt). Alle Stimmen sind dann
+still.
+
+Register setzen: zwei Datenbytes, Adresse und Wert.
+
+   Adresse  Bedeutung
+   02h/03h  Stimme 1, Schrittweite lo/hi
+   06h/07h  Stimme 2, Schrittweite lo/hi
+   1Ch/1Dh  Stimme 3, Schrittweite lo/hi
+   01h/05h/1Bh  Phase hi der Stimmen 1/2/3 (0 = Neuanschlag)
+   1Fh      Rauschen: 0 = aus, sonst Startwert (z. B. A5h)
+   1Ah      Unterbefehl: 01h startet das Rennwerk (Abschnitt 5);
+            andere Werte werden nur gespeichert
+   Alle anderen Adressen nicht beschreiben.
+
+   Frequenz = Schrittweite * 6726,6 Hz / 65536
+   Schrittweite = Frequenz * 9,743   (440 Hz -> 4287 = 10BFh)
+   Schrittweite 0 = Stimme still. Bereich etwa 0,1 Hz bis 3 kHz.
+
+Uhr: Solange der Synthesizer laeuft, zeigen Status Bit 7..4 die oberen
+vier Bits des 8741-Timers: 16 Schritte zu 1,28 ms, Umlauf 20,48 ms.
+Wer die Uhr oefter als alle 20 ms liest, hat eine quarzgenaue Zeitbasis
+(Takt fuer Musik), unabhaengig vom 8253 und von DOS.
+
+Tastatur: Der Synthesizer fragt die Tastatur alle 100 ms selbst ab und
+gibt Tasten ganz normal ueber Port 40h an DOS weiter, ohne Klick. Kommt
+ein Befehl vom BIOS (z. B. Glocke), endet der Synthesizer; ein Programm
+prueft deshalb Bit 2 und schaltet ihn bei Bedarf neu ein.
+
+Beenden: Befehl 05h. Danach ist Bit 2 = 0 und der Status wieder C0h/
+E0h/D0h.
+
+
+4. Turbo Pascal 3
+-----------------
+DMVSYN.INC enthaelt alles Noetige: SynAvail, SynBegin, SynEnd,
+SynRunning, SynFreq(Stimme, Hz), SynInc(Stimme, Schrittweite),
+SynNoise(an), SynClock, SynWait(Schritte zu 1,28 ms), RaceStart,
+RacePoll, RaceResult. Beispiel: SYNDEMO.PAS. Beides
+und die Firmware: github.com/rfka01/dmv_firmware, Verzeichnis SYNDEMO.
+
+
+5. Rennwerk (Divisionstest)
+---------------------------
+Der 8741 zerlegt die Zahlen 50000..50399 durch Probedivision in
+Primfaktoren und zaehlt sie: Ergebnis 1388 (056Ch), 30070 Divisionen
+16/8 Bit, Dauer 22,9 s (9 165 883 Zyklen zu 2,5 us, gemessen in der
+Simulation des 8741).
+
+Start: Synthesizer einschalten (05h), dann Daten 1Ah, 01h.
+   - Innerhalb von 1 ms: Status Bit 2 = 0 und Bits 7..4 = 5 (50h):
+     Rennwerk laeuft.
+   - Bleibt Bit 2 = 1: aeltere Firmware ohne Rennwerk; mit 05h beenden.
+Fortschritt: Nach jeder fertigen Zahl legt der 8741 k/2 (k = fertige
+   Zahlen, also 0..200) an Port 40h, aber nur wenn der vorige Wert
+   abgeholt ist (OBF = Bit 0). Er wartet dabei nie auf den Rechner.
+Ende: Status Bits 7..4 = 6 (60h) und OBF: das naechste Byte ist das
+   Ergebnis lo, das darauf folgende das Ergebnis hi. Danach kehrt der
+   8741 in die Hauptschleife zurueck (Status wieder C0h/E0h/D0h).
+Abbruch: jeder Befehl an 41h. Datenbytes waehrend des Rennens werden
+   verworfen. Die Tastatur wird waehrend des Rennens nicht abgefragt;
+   sie puffert die Tasten selbst.
+
+
+6. Belegung im ROM
+------------------
+114h..1FFh Synthesizer und Division; 2BBh..2FFh Keyclick (Befehle 02h..04h
+zusammengefasst), Einsprung 05h, Rennwerk-Ende; 356h..3FCh Tastatur-
+abfrage im Synthesizer und Rennwerk. Die Eintraege 43..50 der Tontabelle
+(unbrauchbare Muell-Toene von Befehl 06h) sind dafuer ueberschrieben;
+Befehl 06h mit Ton 1..42 ist unveraendert.
+
+Code: Claude (Anthropic), Idee und Prompts: rfka01 - Lizenz MIT
+(NCRs Originalcode in der Firmware faellt nicht darunter).

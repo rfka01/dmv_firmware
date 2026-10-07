@@ -1,0 +1,439 @@
+; SYNTH.A48 - Dreistimmiger Synthesizer mit Rauschen fuer den Tastatur-
+;             Controller 8741 der NCR DMV (ROM 32678 + Keyclick v4)
+;
+; Befehl 05h schaltet den Synthesizer ein. Danach schreibt der Rechner
+; Paare (Adresse, Wert) als Daten an Port 40h:
+;   02h/03h  Stimme 1, Schrittweite lo/hi     (Bank 0, R2/R3)
+;   06h/07h  Stimme 2, Schrittweite lo/hi     (Bank 0, R6/R7)
+;   1Ch/1Dh  Stimme 3, Schrittweite lo/hi     (Bank 1, R4/R5)
+;   1Fh      Rauschen: 0 = aus, sonst Startwert (setzt R6 und R7)
+; Frequenz = Schrittweite * Takt / 65536, Takt = 1 / (59 Zyklen * 2,5 us)
+; = 6780 Hz (mit Tastaturabfrage gemessen etwas weniger).
+; Schrittweite 0 = Stimme steht (still).
+; Jeder Befehl (Port 41h) beendet den Synthesizer: 05h kehrt nur zurueck,
+; jeder andere Befehl wird danach normal ausgefuehrt.
+;
+; Ausgabe im Zeitmultiplex: Jede Stimme bestimmt P2.0 fuer etwa ein
+; Viertel der Schleife (16/14/14/15 Zyklen).
+;
+; Tastatur: Alle 5 Timer-Ueberlaeufe (5 x 20,48 ms) fragt der
+; Synthesizer die Tastatur ab - wie im ROM, aber mit 0,48 ms statt 8 ms
+; Wartezeit -, legt eine Taste in den FIFO des ROMs und liefert die
+; aelteste wartende Taste an den Rechner aus (wenn OBF frei ist).
+;
+; Status (Port 41h): Solange der Synthesizer laeuft, ist Bit 2 (F0)
+; gesetzt, und die Bits 7..4 zeigen die oberen vier Bits des 8741-Timers
+; - eine Uhr fuer den Rechner (1,28 ms je Schritt, Umlauf 20,48 ms).
+; Ausserhalb: Bit 7 = Synthesizer vorhanden, Bits 6..4 wie Keyclick v4.
+;
+; RAM: Waehrend der Synthesizer laeuft, ist der Stapel des ROMs leer
+; (Befehlsverteiler ohne CALL). 08h..0Bh bleiben fuer CALL 0E9h frei,
+; 0Ch..11h dienen als Ablage.
+
+FLAG    EQU 29h         ; Keyclick: 0 an, 1 aus, 2 LOW
+FIFRD   EQU 0Ch         ; gesicherter FIFO-Lesezeiger (Bank 1 R0)
+FIFWR   EQU 0Dh         ; gesicherter FIFO-Schreibzeiger (Bank 1 R1)
+SAVR7   EQU 0Eh         ; gesichertes R7 der Bank 0
+PENDA   EQU 0Fh         ; Adresse, auf deren Wert gewartet wird (0 = keine)
+DIV     EQU 10h         ; Teiler fuer die Tastaturabfrage
+SAVA    EQU 11h         ; A waehrend der Tastaturabfrage
+DELAY   EQU 0E9h        ; ROM: DJNZ R1,$ / RET
+MAIN    EQU 060h        ; ROM: Hauptschleife
+DISP    EQU 200h        ; ROM: Befehlsverteiler (liest DBB erneut)
+KRESET  EQU 0D8h        ; ROM: Reset-Taste B3h
+POLLDIV EQU 5
+
+        ORG 114h
+
+synth:  MOV R0,#18h             ; FIFO-Zeiger (Bank 1 R0/R1) sichern
+        MOV A,@R0
+        MOV R1,#FIFRD
+        MOV @R1,A
+        INC R0
+        MOV A,@R0
+        INC R1
+        MOV @R1,A
+        MOV A,R7                ; R7 der Bank 0 sichern
+        INC R1
+        MOV @R1,A
+        INC R1
+        MOV @R1,#0              ; PEND = 0
+        INC R1
+        MOV @R1,#POLLDIV        ; DIV
+        CLR A                   ; alle Stimmen still: Schrittweiten und
+        MOV R2,A                ; Rauschen 0 (die Phasen sind egal)
+        MOV R3,A
+        MOV R6,A
+        MOV R7,A
+        SEL RB1
+        MOV R4,A
+        MOV R5,A
+        MOV R6,A
+        MOV R7,A
+        SEL RB0
+        CPL F0                  ; F0 = 1: Synthesizer laeuft (Status Bit 2);
+                                ; beim Einsprung ist F0 0 (ROM 010h/0A6h)
+        MOV T,A                 ; A ist hier 0
+        STRT T
+        JTF loop                ; TF loeschen
+loop:
+; --- Uhr fuer den Rechner: Status Bits 7..4 = Timer Bits 7..4 -------
+;     (1,28 ms je Schritt, 20,48 ms Umlauf)
+        MOV A,T
+        MOV STS,A
+; --- Stimme 1 (Bank 0: R0/R1 Phase, R2/R3 Schrittweite) ------- 16 Zyklen
+        MOV A,R0
+        ADD A,R2
+        MOV R0,A
+        MOV A,R1
+        ADDC A,R3
+        MOV R1,A
+        RL A
+        ORL A,#0FEh
+        OUTL P2,A
+; --- Stimme 2 (Bank 0: R4/R5 Phase, R6/R7 Schrittweite) ------- 14 Zyklen
+        MOV A,R4
+        ADD A,R6
+        MOV R4,A
+        MOV A,R5
+        ADDC A,R7
+        MOV R5,A
+        RL A
+        ORL A,#0FEh
+        SEL RB1
+        JTF tick
+t2:     OUTL P2,A
+; --- Stimme 3 (Bank 1: R2/R3 Phase, R4/R5 Schrittweite) ------- 14 Zyklen
+        MOV A,R2
+        ADD A,R4
+        MOV R2,A
+        MOV A,R3
+        ADDC A,R5
+        MOV R3,A
+        RL A
+        ORL A,#0FEh
+        NOP
+        JNIBF t3
+        JMP hnd
+t3:     OUTL P2,A
+; --- Rauschen (Bank 1: R6/R7, Rueckkopplung Bit 15 xor Bit 6) - 15 Zyklen
+        MOV A,R6
+        RL A
+        XRL A,R7
+        RLC A
+        MOV A,R6
+        RLC A
+        MOV R6,A
+        MOV A,R7
+        RLC A
+        MOV R7,A
+        RL A
+        ORL A,#0FEh
+        OUTL P2,A
+        SEL RB0
+        JMP loop
+
+; --- Datenbyte vom Rechner (Bank 1) ---------------------------------
+hnd:    JF1 hcmd                ; F1 vor dem Lesen pruefen (wie ROM 0A9h):
+        IN A,DBB                ; danach darf der Rechner schon schreiben
+        MOV R1,A                ; Byte
+        MOV R0,#PENDA
+        MOV A,@R0
+        JNZ hval
+        MOV A,R1                ; erstes Byte: Adresse merken
+        MOV @R0,A
+        JMP hret
+hval:   MOV R0,A                ; zweites Byte: Wert schreiben
+        MOV A,R1
+        MOV @R0,A
+        MOV A,R0
+        XRL A,#1Ah              ; 1Ah: Unterbefehle (01h = Rennwerk)
+        JZ hsub
+        XRL A,#05h              ; = Adresse xor 1Fh
+        JNZ hclr                ; Rauschen: beide Haelften setzen
+        MOV A,R1
+        MOV R6,A
+hclr:   MOV R0,#PENDA
+        MOV @R0,#0
+hret:   MOV A,R3                ; Ausgabe Stimme 3 neu bilden, weiter
+        RL A
+        ORL A,#0FEh
+        JMP t3
+hsub:   MOV A,R1                ; Wert 01h: Rennwerk starten
+        DEC A
+        JNZ hclr                ; andere Werte: nur gespeichert
+        ORL P2,#01h             ; Lautsprecher in Ruhelage
+        CLR F0                  ; F0 = 0, Status 50h: Rennwerk rechnet
+        MOV A,#50h
+        MOV STS,A
+        SEL RB0
+        MOV R4,#90h             ; tot = 400 (0190h): je Zahl n ein Faktor
+        MOV R5,#01h             ; ist am Ende selbst prim
+        JMP race
+
+; --- Befehl vom Rechner: Synthesizer beenden -------------------------
+hcmd:   IN A,DBB
+        CLR F0                  ; Synthesizer laeuft nicht mehr
+hcmd2:  MOV R1,A                ; Befehl merken (Bank 1 R1)
+        ORL P2,#01h             ; Lautsprecher in Ruhelage
+        STOP TCNT
+        SEL RB0
+        MOV R0,#18h             ; FIFO-Zeiger zurueck
+        MOV R1,#FIFRD
+        MOV A,@R1
+        MOV @R0,A
+        INC R0
+        INC R1
+        MOV A,@R1
+        XCH A,@R0               ; A = Befehl (stand in 19h), 19h = Zeiger
+        MOV R2,A
+        INC R1
+        MOV A,@R1
+        MOV R7,A                ; R7 der Bank 0 zurueck
+        MOV R0,#FLAG            ; Status wie Keyclick, plus Bit 7
+        MOV A,@R0
+        ADD A,#LOW(ststab)
+        MOVP A,@A
+        MOV STS,A
+        MOV A,R2
+        XRL A,#05h
+        JZ hmain
+        JMP DISP                ; anderen Befehl ausfuehren
+hmain:  JMP MAIN
+ststab: DB 0C0h, 0E0h, 0D0h
+
+; --- Timerueberlauf (Bank 1, A = Ausgabewert Stimme 2) ----------------
+tick:   MOV R0,#SAVA
+        MOV @R0,A
+        MOV R0,#DIV
+        MOV A,@R0
+        DEC A
+        MOV @R0,A
+        JNZ tback
+        MOV @R0,#POLLDIV
+        JMP poll
+tback:  MOV R0,#SAVA
+        MOV A,@R0
+        JMP t2
+
+; --- Division (Bank 1): R3:R2 = m / d, R4 = Rest; Schieben und Abziehen
+divide: MOV A,R0
+        MOV R2,A
+        MOV A,R1
+        MOV R3,A
+        MOV R4,#0
+        MOV R6,#16
+ds:     CLR C
+        MOV A,R2
+        RLC A
+        MOV R2,A
+        MOV A,R3
+        RLC A
+        MOV R3,A
+        MOV A,R4
+        RLC A
+        MOV R4,A
+        JNC dt1
+        ADD A,R5                ; Rest hatte 9 Bit: immer abziehen
+        JMP dtk
+dt1:    ADD A,R5                ; Rest >= d?
+        JNC dnx
+dtk:    MOV R4,A
+        INC R2                  ; Quotientenbit
+dnx:    DJNZ R6,ds
+        RET
+
+
+; --- Taste ausliefern und Tastatur abfragen (Bank 1) -----------------
+        ORG 356h                ; Seite 3, ab Eintrag 43 der Tontabelle (43..50 sind
+                                ; unbrauchbare Muell-Toene; TONE nutzt sinnvoll 1..42)
+; Empfang wie ROM 060h..08Bh, gleiche Abtastzeitpunkte. Statt Bitmasken-
+; tabelle und Bitzaehler sammelt R0 die Bits mit einer Endmarke: Start 80h,
+; jedes Bit kommt mit RRC von oben herein; faellt die Marke unten heraus
+; (Carry), sind 8 Bits da, das erste in Bit 0 (wie im ROM). Die Phase von
+; Stimme 3 (R2/R3) bleibt dabei unberuehrt.
+poll:   MOV R0,#80h             ; Sammler mit Endmarke
+        MOV R1,#02h
+        ORL P1,#03h             ; Abfrageimpuls
+        CALL DELAY
+        ANL P1,#01h
+        MOV R1,#32              ; 32 x 6 Zyklen = 0,48 ms auf die erste Flanke (Antwort nach 0,33 ms)
+pw:     IN A,P1
+        JB0 bl
+        DJNZ R1,pw
+        JMP deliv               ; keine Taste
+pwn:    IN A,P1                 ; naechste Flanke (Zeitgrenze R1 ab 0)
+        JB0 bl
+        DJNZ R1,pwn
+        JMP deliv
+bl:     NOP                     ; wie ROM 078h (DIS TCNTI / STOP TCNT)
+        NOP
+        MOV R1,#05h
+        CALL DELAY
+        IN A,P1                 ; Abtastung wie ROM 07Eh
+        RRC A                   ; Carry = Bit
+        MOV A,R0
+        RRC A
+        MOV R0,A
+        JC pgot                 ; Endmarke heraus: 8 Bits da
+        MOV R1,#09h             ; wie ROM 087h
+        CALL DELAY
+        JMP pwn
+pgot:   XRL A,#0B3h             ; A = Taste
+        JNZ pfifo
+        JMP KRESET              ; Reset-Taste wie im ROM
+pfifo:  XRL A,#0B3h
+        MOV R1,A                ; Taste
+        MOV R0,#FIFWR
+        MOV A,@R0
+        XRL A,#3Eh
+        JZ deliv                ; FIFO voll: verwerfen
+        XRL A,#3Eh
+        XCH A,R1                ; A = Taste, R1 = Schreibzeiger
+        MOV @R1,A
+        INC R1
+        MOV A,R1
+        MOV @R0,A
+deliv:  JOBF pdone                 ; Rechner hat die letzte Taste noch nicht
+        MOV R0,#FIFRD
+        MOV A,@R0
+        INC R0
+        XRL A,@R0
+        JZ pdone                ; FIFO leer
+        DEC R0
+        MOV A,@R0
+        MOV R1,A
+        MOV A,@R1
+        OUT DBB,A               ; Taste an den Rechner
+        INC R1
+        MOV A,R1
+        INC R0
+        XRL A,@R0
+        JNZ pst
+        MOV R1,#2Ah             ; FIFO leer: beide Zeiger auf Anfang
+        MOV A,R1
+        MOV @R0,A
+pst:    DEC R0
+        MOV A,R1
+        MOV @R0,A
+pdone:  JMP tback
+
+; ======================================================================
+; Rennwerk: Divisionstest im 8741 (Daten 1Ah, 01h im Synthesizer-Betrieb)
+;
+;   tot = 0
+;   fuer n = 50000 .. 50399:  m = n, d = 2
+;       Schleife: q, r = m / d;  q < d: Ende
+;                 r = 0: m = q, tot + 1   sonst: d + 1
+;       tot + 1
+;   Ergebnis 1388 (056Ch). Hier beginnt tot bei 400 (das "+1" je n),
+;   gezaehlt wird nur noch bei r = 0.
+;
+; Bank 1: R0/R1 m, R2/R3 q, R4 Rest, R5 = -d, R6 Schrittzaehler
+; Bank 0: R2/R3 n, R4/R5 tot. FIFO-Zeiger und R7 der Bank 0 bleiben wie
+; im Synthesizer in 0Ch..0Eh gesichert; der Ausstieg ueber hcmd stellt
+; sie wieder her. Status: 50h waehrend der Rechnung, 60h vor dem Ergebnis.
+; Fortschritt nach jeder Zahl n: k/2 (k = fertige Zahlen) ueber DBB, nur
+; wenn OBF frei ist. Ein Befehl bricht ab, Datenbytes werden verworfen.
+; ======================================================================
+
+race:   MOV R2,#50h             ; n = 50000 (C350h), Bank 0
+        MOV R3,#0C3h
+rn:     MOV A,R2                ; m = n (Bank 0 -> Bank 1)
+        SEL RB1
+        MOV R0,A
+        SEL RB0
+        MOV A,R3
+        SEL RB1
+        MOV R1,A
+        MOV R5,#0FEh            ; d = 2
+rd:     CALL divide
+        MOV A,R3                ; q < d ?
+        JNZ rbig
+        MOV A,R2
+        ADD A,R5
+        JNC rnext
+rbig:   MOV A,R4                ; Rest 0?
+        JNZ rinc
+        MOV A,R2                ; m = q
+        MOV R0,A
+        MOV A,R3
+        MOV R1,A
+        SEL RB0                 ; tot + 1
+        INC R4
+        MOV A,R4
+        JNZ rb1
+        INC R5
+rb1:    SEL RB1
+        JMP rd
+rinc:   DEC R5                  ; d + 1
+        JMP rd
+rnext:  SEL RB0                 ; n + 1
+        INC R2
+        MOV A,R2
+        JNZ rn1
+        INC R3
+rn1:    JNIBF rn2               ; Befehl: Abbruch, Daten: verwerfen
+        JF1 rab
+        IN A,DBB
+rn2:    MOV A,R3                ; k/2 = (n / 2 - 25000) mod 256
+        RRC A
+        MOV A,R2
+        RRC A
+        ADD A,#58h
+        JOBF rn3
+        OUT DBB,A               ; Fortschritt, nur wenn OBF frei
+rn3:    XRL A,#200              ; k = 400: fertig
+        JNZ rn
+        JMP rfin
+rab:    SEL RB1
+        JMP hcmd
+
+; ======================================================================
+; Seite 2 ab 2BBh: Keyclick v4 in gleicher Funktion, Befehle 02h..04h
+; zusammengefasst (der Verteiler springt mit A = Befehl + 4 hierher),
+; dazu der Einsprung fuer Befehl 05h und das Rennwerk-Ende.
+; ======================================================================
+        ORG 2BBh
+hook:   MOV R0,#FLAG            ; Klick nach jeder Taste (ROM 0CDh)
+        MOV A,@R0
+        JZ norm
+        DEC A
+        JZ skip
+        JMP 10Ah                ; 2 = LOW
+norm:   MOV R3,#6Fh             ; 0 = Original-Klick
+        MOV R4,#6Fh
+        MOV R5,#00h
+        MOV R7,#02h
+        CPL F0
+        JMP 264h
+skip:   JMP 0A6h                ; 1 = aus
+cmd234: ADD A,#LOW(ftab)-6      ; A = 6/7/8 -> Merker 1/0/2
+        MOVP A,@A
+        MOV R0,#FLAG
+        MOV @R0,A
+        JMP sts2
+init:   MOV A,#0C0h             ; nach dem Selbsttest (ROM 240h)
+        MOV STS,A
+        JMP 032h
+sts:    MOV R0,#FLAG            ; Ende Befehl 01h (ROM 227h)
+sts2:   MOV A,@R0
+        ADD A,#LOW(tbl)
+        MOVP A,@A
+        MOV STS,A
+        JMP 060h
+tbl:    DB 0C0h, 0E0h, 0D0h     ; Status: Synthesizer da + Klick an/aus/LOW
+ftab:   DB 01h, 00h, 02h        ; Merker fuer Befehl 02h/03h/04h
+cmd5:   JMP synth               ; Befehl 05h
+rfin:   JOBF rfin
+        MOV A,#60h              ; Status 60h: Ergebnis kommt
+        MOV STS,A
+        MOV A,R4                ; tot lo, dann tot hi
+        OUT DBB,A
+rfw:    JOBF rfw
+        MOV A,R5
+        OUT DBB,A
+        SEL RB1
+        MOV A,#05h              ; Ausstieg wie Befehl 05h
+        JMP hcmd2
+

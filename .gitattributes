@@ -11,3 +11,5 @@
 *.COM binary
 *.CMD binary
 *.68K binary
+*.PAS -text
+*.INC -text
